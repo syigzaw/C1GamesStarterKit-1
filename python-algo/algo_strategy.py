@@ -201,7 +201,9 @@ class AlgoStrategy(gamelib.AlgoCore):
             return []
         lst = []
         for rem in self.removes:
-            lst += game_state.game_map.get_locations_in_range([rem[0],rem[1]], 2.5)
+            temp = game_state.game_map.get_locations_in_range([rem[0],rem[1]], 2.5)
+            for i in temp:
+                lst += (i[0],i[1])
         cntd = Counter(lst)
         return  sorted(cntd, key=cntd.get, reverse=True)
         
