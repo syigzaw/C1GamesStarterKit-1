@@ -64,6 +64,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
         self.starter_strategy(game_state)
+        self.spawned = [0, 0, 0]
         self.possible_brake_through_locations = []
         self.scored_on_locations = []
         self.damaged_areas = []
@@ -129,13 +130,13 @@ class AlgoStrategy(gamelib.AlgoCore):
         turret_locations = [[9, 6], [18, 6]]
         # attempt_spawn will try to spawn units if we have resources, and will check if a blocking unit is already there
         game_state.attempt_spawn(TURRET, turret_locations)
-        # game_state.attempt_upgrade(turret_locations)
+        game_state.attempt_upgrade(turret_locations)
 
         # Place walls in front of turrets to soak up damage for them
         wall_locations = [[9, 7], [18, 7]]
         game_state.attempt_spawn(WALL, wall_locations)
         # upgrade walls so they soak more damage
-        # game_state.attempt_upgrade(wall_locations)
+        game_state.attempt_upgrade(wall_locations)
         damaged_area_set = {tuple(i[0]) for i in self.damaged_areas}
         for damaged_area in damaged_area_set:
             damaged_unit = game_state.contains_stationary_unit(damaged_area)
@@ -235,13 +236,13 @@ class AlgoStrategy(gamelib.AlgoCore):
                 while game_state.get_resource(MP) >= 3:
                     game_state.attempt_spawn(DEMOLISHER, location)
         else:
-            scout_damage_minus_wall_attack = [damage - attack for damage, attack in zip(damage_locations[0], [i[0] for i in attack_locations[0]])]
-            scout_damage_minus_factory_attack = [damage - attack for damage, attack in zip(damage_locations[0], [i[1] for i in attack_locations[0]])]
+            scout_damage_minus_wall_attack = [damage - attack*0.25 for damage, attack in zip(damage_locations[0], [i[0] for i in attack_locations[0]])]
+            scout_damage_minus_factory_attack = [damage - attack*0.25 for damage, attack in zip(damage_locations[0], [i[1] for i in attack_locations[0]])]
             min_scout_damage_minus_attack = [min(i, j) for i, j in zip(scout_damage_minus_wall_attack, scout_damage_minus_factory_attack)]
             locations = [x for _,x in sorted(zip(min_scout_damage_minus_attack,friendly_edges))]
             location = random.choice(self.filter_blocked_locations(friendly_edges, game_state))
             for i in locations:
-                if game_state.can_spawn(SCOUT, i):
+                if game_state.can_spawn(SCOUT, i) and len(game_state.find_path_to_edge(i)) > 4:
                     location = i
                     break
             if game_state.can_spawn(SCOUT, location):
@@ -264,6 +265,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                     for path_location in path:
                         # Get number of enemy turrets that can attack each location and multiply by turret damage
                         damage += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i * (i+1)
+                damage += self.spawned[2] * gamelib.GameUnit(INTERCEPTOR, game_state.config).damage_i
                 damages[i].append(damage)
             
         # Now just return the location that takes the least damage
@@ -318,6 +320,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         if state["turnInfo"][2] == 0:
             for spawn in spawns:
                 if spawn[3] == 2 and spawn[1] in [3, 4, 5]:
+                    self.spawned[spawn[1]-3] += 1
                     self.spawn_id_locations[spawn[2]] = spawn[0]
                     self.spawn_locations.append(spawn[0])
             units = [j for i in [3, 4, 5] for j in state["p2Units"][i]]
