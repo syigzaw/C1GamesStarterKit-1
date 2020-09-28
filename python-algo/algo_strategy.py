@@ -353,7 +353,32 @@ class AlgoStrategy(gamelib.AlgoCore):
             return None
         
         # Now just return the location that takes the least damage
-        return [x for _,x in sorted(zip(damages,location_options))]
+        return [x for _, x in sorted(zip(damages, location_options))]
+
+    def enemy_least_damage_location(self, game_state):
+        damages = []
+        enemy_edges = game_state.game_map.get_edge_locations(game_state.game_map.TOP_LEFT) + \
+                      game_state.game_map.get_edge_locations(game_state.game_map.TOP_RIGHT)
+        
+        all_paths = []
+        for location in enemy_edges:
+            path = game_state.find_path_to_edge(location)
+            all_paths.append(path)
+            damage = 0
+            if path:
+                for path_location in path:
+                    # Get number of enemy turrets that can attack each location and multiply by turret damage
+                    damage += len(game_state.get_attackers(path_location, 1)) * gamelib.GameUnit(TURRET,
+                                                                                                 game_state.config).damage_i
+            damages.append(damage)
+        if not damages:
+            return None
+
+        probable_attack_path = all_paths[damages.index(min(damages))]
+        filtered_attack_path = list(filter(lambda x: True if x[1] <= 13 else False, probable_attack_path))
+
+        return filtered_attack_path
+
 
     def detect_enemy_unit(self, game_state, unit_type=None, valid_x = None, valid_y = None):
         total_units = 0
