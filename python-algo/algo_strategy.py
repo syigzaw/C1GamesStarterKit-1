@@ -231,7 +231,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                         [location[0], location[1]]
                         ])
         if game_state.get_resource(SP) >= 3:
-            acc_set = vuln_set.intersection(hit_set) + rmv_set.intersection(hit_set) + vuln_set.intersection(rmv_set)
+            acc_set = vuln_set.intersection(hit_set).union(rmv_set.intersection(hit_set)).union(vuln_set.intersection(rmv_set))
             for loc in acc_set:
                 path = game_state.find_path_to_edge([loc[0], loc[1]])
                 if path:
@@ -247,7 +247,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                             ])
         
         if game_state.get_resource(SP) >= 3:
-            acc_set = vuln_set + vuln_set + rmv_set
+            acc_set = vuln_set.union(hit_set).union(rmv_set)
             for loc in acc_set:
                 path = game_state.find_path_to_edge([loc[0], loc[1]])
                 if path:
@@ -425,10 +425,12 @@ class AlgoStrategy(gamelib.AlgoCore):
                                                                                                  game_state.config).damage_i
             damages.append(damage)
         if not damages:
-            return None
+            return []
 
         probable_attack_path = all_paths[damages.index(min(damages))]
-        filtered_attack_path = list(filter(lambda x: True if x[1] <= 13 else False, probable_attack_path))
+        filtered_attack_path = []
+        if probable_attack_path:
+            filtered_attack_path = list(filter(lambda x: True if x[1] <= 13 else False, probable_attack_path))
 
         return filtered_attack_path
 
