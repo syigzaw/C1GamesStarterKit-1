@@ -212,9 +212,9 @@ class AlgoStrategy(gamelib.AlgoCore):
         We can track where the opponent scored by looking at events in action frames 
         as shown in the on_action_frame function
         """
-        vuln_set = {(i[0], i[1]) for i in self.enemy_least_damage_location(game_state)}
-        rmv_set = {(i[0], i[1]) for i in self.check_enemy_removes(game_state)}
-        hit_set = {(i[0], i[1]) for i in self.scored_on_locations}
+        vuln_set = {(i[0], i[1]) for i in self.enemy_least_damage_location(game_state) if isinstance(i, list)}
+        rmv_set = {(i[0], i[1]) for i in self.check_enemy_removes(game_state) if isinstance(i, list)}
+        hit_set = {(i[0], i[1]) for i in self.scored_on_locations if isinstance(i, list)}
 
         acc_set = vuln_set.intersection(rmv_set).intersection(hit_set)
         for loc in acc_set:
@@ -224,8 +224,8 @@ class AlgoStrategy(gamelib.AlgoCore):
                 if location:
                     location = location[0]
                 if len(location) == 2 and location is not None and location != []:
-                    game_state.attempt_spawn(TURRET, [location[0], location[1]])
-                    game_state.attempt_spawn(WALL, [location[0], location[1]+1])
+                    game_state.attempt_spawn(TURRET, [location[0], min(location[1]-1,13)])
+                    game_state.attempt_spawn(WALL, [location[0], location[1]])
                     game_state.attempt_upgrade([
                         [location[0], location[1]-1],
                         [location[0], location[1]]
@@ -239,8 +239,8 @@ class AlgoStrategy(gamelib.AlgoCore):
                     if location:
                         location = location[0]
                     if len(location) == 2 and location is not None and location != []:
-                        game_state.attempt_spawn(TURRET, [location[0], location[1]])
-                        game_state.attempt_spawn(WALL, [location[0], location[1]+1])
+                        game_state.attempt_spawn(TURRET, [location[0], min(location[1]-1,13)])
+                        game_state.attempt_spawn(WALL, [location[0], min(location[1],13)])
                         game_state.attempt_upgrade([
                             [location[0], location[1]-1],
                             [location[0], location[1]]
@@ -255,8 +255,8 @@ class AlgoStrategy(gamelib.AlgoCore):
                     if location:
                         location = location[0]
                     if len(location) == 2 and location is not None and location != []:
-                        game_state.attempt_spawn(TURRET, [location[0], location[1]])
-                        game_state.attempt_spawn(WALL, [location[0], location[1]+1])
+                        game_state.attempt_spawn(TURRET, [location[0], min(location[1]-1, 13)])
+                        game_state.attempt_spawn(WALL, [location[0], location[1]])
                         game_state.attempt_upgrade([
                             [location[0], location[1]-1],
                             [location[0], location[1]]
