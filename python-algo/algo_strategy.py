@@ -4,7 +4,7 @@ import math
 import warnings
 from sys import maxsize
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 import math
 import random
 
@@ -50,6 +50,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.damaged_areas = []
         self.spawn_locations = []
         self.spawn_id_locations = {}
+        self.removes = []
 
     def on_turn(self, turn_state):
         """
@@ -69,6 +70,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.scored_on_locations = []
         self.damaged_areas = []
         self.spawn_locations = []
+        self.removes = []
 
         game_state.submit_turn()
 
@@ -138,26 +140,45 @@ class AlgoStrategy(gamelib.AlgoCore):
         # upgrade walls so they soak more damage
         game_state.attempt_upgrade(wall_locations)
         damaged_area_set = {tuple(i[0]) for i in self.damaged_areas}
-        for damaged_area in damaged_area_set:
-            damaged_unit = game_state.contains_stationary_unit(damaged_area)
-            if damaged_unit and damaged_unit.health/damaged_unit.max_health < 0.5:
-                if game_state.can_spawn(TURRET, [damaged_area[0]-1, damaged_area[1]]):
-                    turret_locations = [damaged_area[0]-1, damaged_area[1]]
-                    wall_locations = [damaged_area[0]-1, damaged_area[1]+1]
-                else:
-                    turret_locations = [damaged_area[0]+1, damaged_area[1]]
-                    wall_locations = [damaged_area[0]+1, damaged_area[1]+1]
-                game_state.attempt_spawn(TURRET, turret_locations)
-                game_state.attempt_upgrade(turret_locations)
-                game_state.attempt_spawn(WALL, wall_locations)
-                game_state.attempt_upgrade(wall_locations)
-            elif not damaged_unit:
-                turret_locations = [damaged_area[0], damaged_area[1]]
-                wall_locations = [damaged_area[0], damaged_area[1]+1]
-                game_state.attempt_spawn(TURRET, turret_locations)
-                game_state.attempt_upgrade(turret_locations)
-                game_state.attempt_spawn(WALL, wall_locations)
-                game_state.attempt_upgrade(wall_locations)
+        for elem in self.damaged_areas:
+            if damaged_area_set.issuperset(set(elem[0])):
+                damaged_area = elem[0]
+                damaged_area_set.remove(elem[0])
+                damaged_unit = game_state.contains_stationary_unit(damaged_area)
+                if damaged_unit and damaged_unit.health/damaged_unit.max_health < 0.5:
+                    if game_state.can_spawn(TURRET, [damaged_area[0]-1, damaged_area[1]]):
+                        turret_locations = [damaged_area[0]-1, damaged_area[1]]
+                        wall_locations = [damaged_area[0]-1, damaged_area[1]+1]
+                    else:
+                        turret_locations = [damaged_area[0]+1, damaged_area[1]]
+                        wall_locations = [damaged_area[0]+1, damaged_area[1]+1]
+                    game_state.attempt_spawn(TURRET, turret_locations)
+                    game_state.attempt_upgrade(turret_locations)
+                    game_state.attempt_spawn(WALL, wall_locations)
+                    game_state.attempt_upgrade(wall_locations)
+                elif not damaged_unit:
+                    turret_locations = [damaged_area[0], damaged_area[1]]
+                    wall_locations = [damaged_area[0], damaged_area[1]+1]
+                    game_state.attempt_spawn(TURRET, turret_locations)
+                    game_state.attempt_upgrade(turret_locations)
+                    game_state.attempt_spawn(WALL, wall_locations)
+                    game_state.attempt_upgrade(wall_locations)
+
+    def check_enemy_removes(self, game_state):
+        """
+        This function will return the list of where to put turrets to defend from enemy removes,
+        from most important to least important
+        """
+        if len(self.removes)==0:
+            return []
+        lst = []
+        for rem in self.removes:
+            temp = game_state.game_map.get_locations_in_range([rem[0],rem[1]], 2.5)
+            for i in temp:
+                lst += (i[0],i[1])
+        cntd = Counter(lst)
+        return  sorted(cntd, key=cntd.get, reverse=True)
+        
 
     def build_reactive_defense(self, game_state):
         """
@@ -165,41 +186,89 @@ class AlgoStrategy(gamelib.AlgoCore):
         We can track where the opponent scored by looking at events in action frames 
         as shown in the on_action_frame function
         """
-        for scored_on_location in self.scored_on_locations:
-            path = game_state.find_path_to_edge(scored_on_location)
+        vuln_set = {(i[0], i[1]) for i in self.enemy_least_damage_location(game_state) if isinstance(i, list)}
+        rmv_set = {(i[0], i[1]) for i in self.check_enemy_removes(game_state) if isinstance(i, list)}
+        hit_set = {(i[0], i[1]) for i in self.scored_on_locations if isinstance(i, list)}
+
+        acc_set = vuln_set.intersection(rmv_set).intersection(hit_set)
+        for loc in acc_set:
+            path = game_state.find_path_to_edge([loc[0], loc[1]])
             if path:
                 location = [i for i in path if i[1] == 13]
                 if location:
                     location = location[0]
-                if type(location) == list and len(location) == 2:
-                    if location[0] == 0:
-                        game_state.attempt_spawn(WALL, [location[0], location[1]])
-                        game_state.attempt_upgrade([location[0], location[1]])
-                        location[0] += 1
-                    elif location[0] == 27:
-                        game_state.attempt_spawn(WALL, [location[0], location[1]])
-                        game_state.attempt_upgrade([location[0], location[1]])
-                        location[0] -= 1
-                    game_state.attempt_spawn(TURRET, [location[0], location[1]-1])
+                if len(location) == 2 and location is not None and location != []:
+                    game_state.attempt_spawn(TURRET, [location[0], min(location[1]-1,13)])
                     game_state.attempt_spawn(WALL, [location[0], location[1]])
                     game_state.attempt_upgrade([
-                        [location[0], location[1]-1], 
+                        [location[0], location[1]-1],
                         [location[0], location[1]]
                         ])
+        if game_state.get_resource(SP) >= 3:
+            acc_set = vuln_set.intersection(hit_set).union(rmv_set.intersection(hit_set)).union(vuln_set.intersection(rmv_set))
+            for loc in acc_set:
+                path = game_state.find_path_to_edge([loc[0], loc[1]])
+                if path:
+                    location = [i for i in path if i[1] == 13]
+                    if location:
+                        location = location[0]
+                    if len(location) == 2 and location is not None and location != []:
+                        game_state.attempt_spawn(TURRET, [location[0], min(location[1]-1,13)])
+                        game_state.attempt_spawn(WALL, [location[0], min(location[1],13)])
+                        game_state.attempt_upgrade([
+                            [location[0], location[1]-1],
+                            [location[0], location[1]]
+                            ])
+        
+        if game_state.get_resource(SP) >= 3:
+            acc_set = vuln_set.union(hit_set).union(rmv_set)
+            for loc in acc_set:
+                path = game_state.find_path_to_edge([loc[0], loc[1]])
+                if path:
+                    location = [i for i in path if i[1] == 13]
+                    if location:
+                        location = location[0]
+                    if len(location) == 2 and location is not None and location != []:
+                        game_state.attempt_spawn(TURRET, [location[0], min(location[1]-1, 13)])
+                        game_state.attempt_spawn(WALL, [location[0], location[1]])
+                        game_state.attempt_upgrade([
+                            [location[0], location[1]-1],
+                            [location[0], location[1]]
+                            ])
 
         location_scored_counts = defaultdict(int)
         for location in self.scored_on_locations:
+            # path = game_state.find_path_to_edge(location)
+            # brake_through_location = [i for i in path if i[1] = 13][0]
+            # game_state.attempt_spawn(TURRET, [
+            #     [brake_through_location[0]-1, brake_through_location[1]-1],
+            #     [brake_through_location[0], brake_through_location[1]-1],
+            #     [brake_through_location[0]+1, brake_through_location[1]-1]
+            #     ])
+            # game_state.attempt_spawn(WALL, [
+            #     [brake_through_location[0]-1, brake_through_location[1]],
+            #     [brake_through_location[0], brake_through_location[1]],
+            #     [brake_through_location[0]+1, brake_through_location[1]]
+            #     ])
+            # game_state.attempt_upgrade([
+            #     [brake_through_location[0]-1, brake_through_location[1]-1],
+            #     [brake_through_location[0], brake_through_location[1]-1],
+            #     [brake_through_location[0]+1, brake_through_location[1]-1],
+            #     [brake_through_location[0]-1, brake_through_location[1]],
+            #     [brake_through_location[0], brake_through_location[1]],
+            #     [brake_through_location[0]+1, brake_through_location[1]]
+            #     ])
             location_scored_counts[tuple(location)] += 1
 
         for spawn_location in self.spawn_locations:
             path = game_state.find_path_to_edge(spawn_location)
             if path:
-                gamelib.debug_write("spawn_locations", spawn_location)
+                #gamelib.debug_write("spawn_locations", spawn_location)
                 breach_location = path[0]
                 location_scored_counts[tuple(breach_location)] += 1
 
         for possible_brake_through_location in self.possible_brake_through_locations:
-            gamelib.debug_write("possible_brake_through_location", possible_brake_through_location)
+            #gamelib.debug_write("possible_brake_through_location", possible_brake_through_location)
             location_scored_counts[tuple(possible_brake_through_location)] += 1
 
         location_scored_counts_sum = sum(location_scored_counts.values())
@@ -209,7 +278,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             location_scored_counts_list.append([scored_count, location])
         location_scored_counts_list.sort()
         location_scored_counts_list.reverse()
-        gamelib.debug_write("location_scored_counts_list", location_scored_counts_list)
+        #gamelib.debug_write("location_scored_counts_list", location_scored_counts_list)
         for scored_count, location in location_scored_counts_list:
             can_spawn = False
             for i in [0, 1, -1, 2, -2]:
@@ -222,8 +291,8 @@ class AlgoStrategy(gamelib.AlgoCore):
                         can_spawn = True
                         game_state.attempt_spawn(INTERCEPTOR, location)
                 if can_spawn:
-                    break
-
+                    break              
+    
     def attack(self, game_state):
         friendly_edges = game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_LEFT) + game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_RIGHT)
         damage_locations = self.least_damage_spawn_location(game_state, friendly_edges)
@@ -296,6 +365,64 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Now just return the location that takes the least damage
         return attacks
 
+    def safe_non_blocked_path(self, game_state, location):
+        path = game_state.find_path_to_edge(location)
+        enemy_edge = game_state.game_map.get_edge_locations(game_state.game_map.TOP_LEFT) + game_state.game_map.get_edge_locations(game_state.game_map.TOP_RIGHT)
+        #gamelib.debug_write('Path: {}\nLocation: {}'.format(path, location))
+        if location is not None and path is not None:
+            return path[-1] in enemy_edge
+        else:
+            return False
+
+    def valuable_spawn_locations(self, game_state):
+        """
+        returns list of locations that it actually makes sense to spawn from
+        """
+
+        friendly_edges = game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_LEFT) + game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_RIGHT)
+        #gamelib.debug_write('Friend: {}'.format(friendly_edges))
+        possible_edges = filter(lambda loc: not game_state.contains_stationary_unit(loc), friendly_edges)
+        #gamelib.debug_write('Possible: {}'.format(list(possible_edges)))
+        out = filter(lambda loc: self.safe_non_blocked_path(game_state,loc),possible_edges)
+        #gamelib.debug_write('Out: {}'.format(list(possible_edges)))
+        return list(out)
+
+    def enemy_least_damage_location(self, game_state):
+        damages = []
+        enemy_edges = game_state.game_map.get_edge_locations(game_state.game_map.TOP_LEFT) + \
+                      game_state.game_map.get_edge_locations(game_state.game_map.TOP_RIGHT)
+        
+        all_paths = []
+        for location in enemy_edges:
+            path = game_state.find_path_to_edge(location)
+            all_paths.append(path)
+            damage = 0
+            if path:
+                for path_location in path:
+                    # Get number of enemy turrets that can attack each location and multiply by turret damage
+                    damage += len(game_state.get_attackers(path_location, 1)) * gamelib.GameUnit(TURRET,
+                                                                                                 game_state.config).damage_i
+            damages.append(damage)
+        if not damages:
+            return []
+
+        probable_attack_path = all_paths[damages.index(min(damages))]
+        filtered_attack_path = []
+        if probable_attack_path:
+            filtered_attack_path = list(filter(lambda x: True if x[1] <= 13 else False, probable_attack_path))
+
+        return filtered_attack_path
+
+
+    def detect_enemy_unit(self, game_state, unit_type=None, valid_x = None, valid_y = None):
+        total_units = 0
+        for location in game_state.game_map:
+            if game_state.contains_stationary_unit(location):
+                for unit in game_state.game_map[location]:
+                    if unit.player_index == 1 and (unit_type is None or unit.unit_type == unit_type) and (valid_x is None or location[0] in valid_x) and (valid_y is None or location[1] in valid_y):
+                        total_units += 1
+        return total_units
+        
     def filter_blocked_locations(self, locations, game_state):
         filtered = []
         for location in locations:
@@ -323,7 +450,9 @@ class AlgoStrategy(gamelib.AlgoCore):
                     self.spawned[spawn[1]-3] += 1
                     self.spawn_id_locations[spawn[2]] = spawn[0]
                     self.spawn_locations.append(spawn[0])
+        #             self.spawned[spawn[1]-3] += 1
             units = [j for i in [3, 4, 5] for j in state["p2Units"][i]]
+            self.removes = state["p2Units"][6]
         game_state = gamelib.GameState(self.config, turn_string)
         for unit in units:
             if unit[1] == 11:
