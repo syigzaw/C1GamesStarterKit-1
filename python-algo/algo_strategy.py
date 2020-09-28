@@ -64,8 +64,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
-        self.check_enemy_removes(game_state)
-
         self.starter_strategy(game_state)
         self.spawned = [0, 0, 0]
         self.possible_brake_through_locations = []
@@ -214,19 +212,55 @@ class AlgoStrategy(gamelib.AlgoCore):
         We can track where the opponent scored by looking at events in action frames 
         as shown in the on_action_frame function
         """
-        for scored_on_location in self.scored_on_locations:
-            path = game_state.find_path_to_edge(scored_on_location)
+        vuln_set = {(i[0], i[1]) for i in self.enemy_least_damage_location(game_state)}
+        rmv_set = {(i[0], i[1]) for i in self.check_enemy_removes(game_state)}
+        hit_set = {(i[0], i[1]) for i in self.scored_on_locations}
+
+        acc_set = vuln_set.intersection(rmv_set).intersection(hit_set)
+        for loc in acc_set:
+            path = game_state.find_path_to_edge([loc[0], loc[1]])
             if path:
                 location = [i for i in path if i[1] == 13]
                 if location:
                     location = location[0]
                 if len(location) == 2 and location is not None and location != []:
-                    game_state.attempt_spawn(TURRET, [location[0], location[1]-1])
-                    game_state.attempt_spawn(WALL, [location[0], location[1]])
+                    game_state.attempt_spawn(TURRET, [location[0], location[1]])
+                    game_state.attempt_spawn(WALL, [location[0], location[1]+1])
                     game_state.attempt_upgrade([
                         [location[0], location[1]-1],
                         [location[0], location[1]]
                         ])
+        if game_state.get_resource(SP) >= 3:
+            acc_set = vuln_set.intersection(hit_set) + rmv_set.intersection(hit_set) + vuln_set.intersection(rmv_set)
+            for loc in acc_set:
+                path = game_state.find_path_to_edge([loc[0], loc[1]])
+                if path:
+                    location = [i for i in path if i[1] == 13]
+                    if location:
+                        location = location[0]
+                    if len(location) == 2 and location is not None and location != []:
+                        game_state.attempt_spawn(TURRET, [location[0], location[1]])
+                        game_state.attempt_spawn(WALL, [location[0], location[1]+1])
+                        game_state.attempt_upgrade([
+                            [location[0], location[1]-1],
+                            [location[0], location[1]]
+                            ])
+        
+        if game_state.get_resource(SP) >= 3:
+            acc_set = vuln_set + vuln_set + rmv_set
+            for loc in acc_set:
+                path = game_state.find_path_to_edge([loc[0], loc[1]])
+                if path:
+                    location = [i for i in path if i[1] == 13]
+                    if location:
+                        location = location[0]
+                    if len(location) == 2 and location is not None and location != []:
+                        game_state.attempt_spawn(TURRET, [location[0], location[1]])
+                        game_state.attempt_spawn(WALL, [location[0], location[1]+1])
+                        game_state.attempt_upgrade([
+                            [location[0], location[1]-1],
+                            [location[0], location[1]]
+                            ])
 
         location_scored_counts = defaultdict(int)
         for location in self.scored_on_locations:
