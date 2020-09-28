@@ -4,7 +4,7 @@ import math
 import warnings
 from sys import maxsize
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 import math
 import random
 
@@ -50,6 +50,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.damaged_areas = []
         self.spawn_locations = []
         self.spawn_id_locations = {}
+        self.removes = []
 
     def on_turn(self, turn_state):
         """
@@ -63,12 +64,15 @@ class AlgoStrategy(gamelib.AlgoCore):
         gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
+        self.check_enemy_removes(game_state)
+
         self.starter_strategy(game_state)
         self.spawned = [0, 0, 0]
         self.possible_brake_through_locations = []
         self.scored_on_locations = []
         self.damaged_areas = []
         self.spawn_locations = []
+        self.removes = []
 
         game_state.submit_turn()
 
@@ -188,7 +192,19 @@ class AlgoStrategy(gamelib.AlgoCore):
                     game_state.attempt_spawn(WALL, wall_locations)
                     game_state.attempt_upgrade(wall_locations)
 
-
+    def check_enemy_removes(self, game_state):
+        """
+        This function will return the list of where to put turrets to defend from enemy removes,
+        from most important to least important
+        """
+        if len(self.removes)==0:
+            return []
+        lst = []
+        for rem in self.removes:
+            lst += game_state.game_map.get_locations_in_range([rem[0],rem[1]], 2.5)
+        cntd = Counter(lst)
+        return  sorted(cntd, key=cntd.get, reverse=True)
+        
 
     def build_reactive_defense(self, game_state):
         """
@@ -392,6 +408,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                     self.spawn_locations.append(spawn[0])
         #             self.spawned[spawn[1]-3] += 1
             units = [j for i in [3, 4, 5] for j in state["p2Units"][i]]
+            self.removes = state["p2Units"][6]
         game_state = gamelib.GameState(self.config, turn_string)
         for unit in units:
             if unit[1] == 11:
