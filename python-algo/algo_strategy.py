@@ -202,12 +202,13 @@ class AlgoStrategy(gamelib.AlgoCore):
                 location = [i for i in path if i[1] == 13]
                 if location:
                     location = location[0]
-                game_state.attempt_spawn(TURRET, [location[0], location[1]-1])
-                game_state.attempt_spawn(WALL, [location[0], location[1]])
-                game_state.attempt_upgrade([
-                    [location[0], location[1]-1], 
-                    [location[0], location[1]]
-                    ])
+                if len(location) == 2 and location is not None and location != []:
+                    game_state.attempt_spawn(TURRET, [location[0], location[1]-1])
+                    game_state.attempt_spawn(WALL, [location[0], location[1]])
+                    game_state.attempt_upgrade([
+                        [location[0], location[1]-1],
+                        [location[0], location[1]]
+                        ])
 
         location_scored_counts = defaultdict(int)
         for location in self.scored_on_locations:
