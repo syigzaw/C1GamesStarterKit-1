@@ -116,7 +116,6 @@
       "cost2":1.0,
       "getHitRadius":0.01,
       "display":"scrambler",
-      "attackRange":3.5,
       "shorthand":"SI",
       "startHealth":40.0,
       "speed":0.25,
@@ -165,7 +164,6 @@
     "maxBits":150.0,
     "bitsPerRound":5.0,
     "coresPerRound":5.0,
-    "coresForPlayerDamage":0,
     "startingBits":5.0,
     "bitDecayPerRound":0.25,
     "startingCores":30.0
