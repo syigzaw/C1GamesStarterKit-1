@@ -59,7 +59,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         game engine.
         """
         game_state = gamelib.GameState(self.config, turn_state)
-        game_state.attempt_spawn(DEMOLISHER, [24, 10], 3)
         gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
@@ -99,12 +98,12 @@ class AlgoStrategy(gamelib.AlgoCore):
             deploy_locations = self.filter_blocked_locations(self.friendly_edges, game_state)
 
             # While we have remaining MP to spend lets send out interceptors randomly.
-            while game_state.get_resource(MP) >= game_state.type_cost(TURRET)[MP] and len(deploy_locations) > 0:
+            while game_state.get_resource(MP) >= game_state.type_cost(SCOUT)[MP] and len(deploy_locations) > 0:
                 # Choose a random deploy location.
                 deploy_index = random.randint(0, len(deploy_locations) - 1)
                 deploy_location = deploy_locations[deploy_index]
 
-                game_state.attempt_spawn(TURRET, deploy_location)
+                game_state.attempt_spawn(SCOUT, deploy_location)
 
         else:
             # Build reactive defenses based on where the enemy scored
@@ -113,8 +112,7 @@ class AlgoStrategy(gamelib.AlgoCore):
 
             # If we have spare SP, randomly build some Support near the middle of our field
             support_locations = [[14, 9], [4, 11], [13, 3], [23, 11]]
-            while game_state.get_resource(SP) >= game_state.type_cost(SUPPORT)[SP]:
-                game_state.attempt_spawn(SUPPORT, support_locations)
+            game_state.attempt_spawn(SUPPORT, support_locations)
 
     def he_reactiv_protec(self, game_state):
         #? put turrets where enemies break through, replace units with health < 50%, upgrade with leftover points
@@ -123,11 +121,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         We can track where the opponent scored by looking at events in action frames
         as shown in the on_action_frame function
         """
-        for location in self.scored_on_locs:
-            # Build turret one space above so that it doesn't block our own edge spawn locations
-            build_location = [location[0], location[1]+1]
-            game_state.attempt_spawn(TURRET, build_location)
-
         damaged_area_set = {tuple(i[0]) for i in self.damaged_locs}
         replaced_units = []
         for elem in self.damaged_locs:
@@ -174,22 +167,21 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def he_attac(self, game_state):
         #? code taken from my teammate yiggy z
-        friendly_edges = game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_LEFT) + game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_RIGHT)
-        damage_locations = self.least_damage_spawn_location(game_state, friendly_edges)
-        attack_locations = self.largest_attack_spawn_location(game_state, friendly_edges)
+        damage_vals = self.least_damage_spawn_location(game_state, self.friendly_edges)
+        attack_locs = self.largest_attack_spawn_location(game_state, self.friendly_edges)
 
-        demolisher_damage_locations = sorted(zip(damage_locations[1], friendly_edges))
+        demolisher_damage_locations = sorted(zip(damage_vals, self.friendly_edges))
         if demolisher_damage_locations[0][0] == 0:
             location = demolisher_damage_locations[0][1]
             if game_state.can_spawn(DEMOLISHER, location):
                 while game_state.get_resource(MP) >= 3:
                     game_state.attempt_spawn(DEMOLISHER, location)
         else:
-            scout_damage_minus_wall_attack = [damage - attack*0.25 for damage, attack in zip(damage_locations[0], [i[0] for i in attack_locations[0]])]
-            scout_damage_minus_factory_attack = [damage - attack*0.25 for damage, attack in zip(damage_locations[0], [i[1] for i in attack_locations[0]])]
+            scout_damage_minus_wall_attack = [damage - attack*0.25 for damage, attack in zip(damage_vals, [i[0] for i in attack_locs[0]])]
+            scout_damage_minus_factory_attack = [damage - attack*0.25 for damage, attack in zip(damage_vals, [i[1] for i in attack_locs[0]])]
             min_scout_damage_minus_attack = [min(i, j) for i, j in zip(scout_damage_minus_wall_attack, scout_damage_minus_factory_attack)]
-            locations = [x for _,x in sorted(zip(min_scout_damage_minus_attack, friendly_edges))]
-            location = random.choice(self.filter_blocked_locations(friendly_edges, game_state))
+            locations = [x for _,x in sorted(zip(min_scout_damage_minus_attack, self.friendly_edges))]
+            location = random.choice(self.filter_blocked_locations(self.friendly_edges, game_state))
             for i in locations:
                 if game_state.can_spawn(SCOUT, i) and len(game_state.find_path_to_edge(i)) > 4:
                     location = i
