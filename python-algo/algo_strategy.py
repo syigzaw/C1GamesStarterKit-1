@@ -92,19 +92,19 @@ class AlgoStrategy(gamelib.AlgoCore):
         else:
             self.build_reactive_defense(game_state)
         self.build_defences(game_state)
-        self.build_factories(game_state)
+        self.build_supports(game_state)
         self.attack(game_state)
 
-    def build_factories(self, game_state):
+    def build_supports(self, game_state):
         switch = 1
         x = 13
         hit_limit = False
         retry = False
         while True:
             for y in range(8):
-                if game_state.get_resource(SP) < game_state.type_cost(FACTORY)[SP]:
+                if game_state.get_resource(SP) < game_state.type_cost(SUPPORT)[SP]:
                     return
-                game_state.attempt_spawn(FACTORY, [x, y])
+                game_state.attempt_spawn(SUPPORT, [x, y])
                 if (x > 12 and x < 15) or hit_limit:
                     game_state.attempt_upgrade([x, y])
             game_state.attempt_spawn(WALL, [[13, 8], [13, 9], [13, 10]])
@@ -306,8 +306,8 @@ class AlgoStrategy(gamelib.AlgoCore):
                     game_state.attempt_spawn(DEMOLISHER, location)
         else:
             scout_damage_minus_wall_attack = [damage - attack*0.25 for damage, attack in zip(damage_locations[0], [i[0] for i in attack_locations[0]])]
-            scout_damage_minus_factory_attack = [damage - attack*0.25 for damage, attack in zip(damage_locations[0], [i[1] for i in attack_locations[0]])]
-            min_scout_damage_minus_attack = [min(i, j) for i, j in zip(scout_damage_minus_wall_attack, scout_damage_minus_factory_attack)]
+            scout_damage_minus_support_attack = [damage - attack*0.25 for damage, attack in zip(damage_locations[0], [i[1] for i in attack_locations[0]])]
+            min_scout_damage_minus_attack = [min(i, j) for i, j in zip(scout_damage_minus_wall_attack, scout_damage_minus_support_attack)]
             locations = [x for _,x in sorted(zip(min_scout_damage_minus_attack,friendly_edges))]
             location = random.choice(self.filter_blocked_locations(friendly_edges, game_state))
             for i in locations:
@@ -324,19 +324,16 @@ class AlgoStrategy(gamelib.AlgoCore):
         It gets the path the unit will take then checks locations on that path to 
         estimate the path's damage risk.
         """
-        damages = [[], []]
+        damages = []
         # Get the damage estimate each path will take
-        for i, attacker in enumerate([SCOUT, DEMOLISHER]):
-            for location in location_options:
-                path = game_state.find_path_to_edge(location)
-                damage = 0
-                if path:
-                    for path_location in path:
-                        # Get number of enemy turrets that can attack each location and multiply by turret damage
-                        damage += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i * (i+1)
-                damage += self.spawned[2] * gamelib.GameUnit(INTERCEPTOR, game_state.config).damage_i
-                damages[i].append(damage)
-            
+        for location in location_options:
+            path = game_state.find_path_to_edge(location)
+            damage = 0
+            for path_location in path:
+                # Get number of enemy turrets that can attack each location and multiply by turret damage
+                damage += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
+            damages.append(damage)
+        
         # Now just return the location that takes the least damage
         return damages
 
@@ -346,23 +343,19 @@ class AlgoStrategy(gamelib.AlgoCore):
         It gets the path the unit will take then checks locations on that path to 
         estimate the path's damage risk.
         """
-        attacks = [[], []]
+        attacks = []
         # Get the damage estimate each path will take
         for i, attacker in enumerate([SCOUT, DEMOLISHER]):
             for location in location_options:
                 path = game_state.find_path_to_edge(location)
-                attack = [0, 0]
+                attack = 0
                 if path:
                     for path_location in path:
                         for attack_loc in game_state.game_map.get_locations_in_range(path_location, gamelib.GameUnit(attacker, game_state.config).attackRange):
                             if game_state.contains_stationary_unit(attack_loc):
-                                if game_state.contains_stationary_unit(attack_loc).unit_type == WALL:
-                                    attack[0] += gamelib.GameUnit(attacker, game_state.config).damage_f * (i+1)
-                                elif game_state.contains_stationary_unit(attack_loc).unit_type == FACTORY:
-                                    attack[1] += gamelib.GameUnit(attacker, game_state.config).damage_f * (i+1) * 2
+                                attack += gamelib.GameUnit(attacker, game_state.config).damage_f * game_state.contains_stationary_unit(attack_loc).cost[0]
                 attacks[i].append(attack)
         
-        # Now just return the location that takes the least damage
         return attacks
 
     def safe_non_blocked_path(self, game_state, location):
